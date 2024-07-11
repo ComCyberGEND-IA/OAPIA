@@ -21,9 +21,9 @@ Appuyer sur le bouton run.
 
 ## utilisation recommandée (avec Docker)
 
-Vous trouvez tous les fichiers nécéssaire pour l'installation dans **Installation Docker**.
+Vous trouverez tous les fichiers nécéssaire pour l'installation dans **Installation Docker**.
 
-Mettez dans le dossier souhaitée tous les fichiers présent dans **Installation Docker**.
+Mettez dans le dossier souhaité tous les fichiers présent dans **Installation Docker**.
 
 Dans un terminale, run : `docker build -t nom_de_l'image_souhaitée chemin_du_dossier`.
 
