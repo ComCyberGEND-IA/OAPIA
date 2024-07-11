@@ -1,0 +1,16 @@
+spire
+spire.presentation
+pymupdf
+frontend
+transformers
+langchain_huggingface
+langchain
+Python-IO
+torch
+bitsandbytes
+pillow
+regex
+streamlit
+streamlit_pdf_viewer
+temp
+accelerate

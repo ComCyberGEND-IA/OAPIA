@@ -1,0 +1,8 @@
+# Utiliser une image de base
+FROM nvcr.io/nvidia/pytorch:24.05-py3
+
+COPY requirement.txt .
+# Installer les dépendances
+RUN pip install -r requirement.txt 
+ 
+

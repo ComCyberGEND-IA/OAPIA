@@ -1,0 +1,423 @@
+# Import nécéssaire
+import streamlit as st
+from streamlit_pdf_viewer import pdf_viewer
+import tempfile
+import os
+import fitz 
+import re
+import csv
+import fitz
+import os  
+import torch
+import time
+import warnings
+from gen_phi3_vision import generation_phi3_vision, parametre_phi3_vision
+from gen_llama3 import generation_llama3, parametre_Llama3
+
+warnings.filterwarnings("ignore")
+
+torch.cuda.empty_cache()
+# Pour calculer l'inference
+t0 = time.time()
+
+# Fonction pour formater
+def correct_encoding(text):
+            corrections = {
+                'Ã©': 'é',
+                'Ã¨': 'è',
+                'Ã¢': 'â',
+                'Ã´': 'ô',
+                'Ãª': 'ê',
+                'Å“': 'œ',
+                'Ã': 'à',
+                'Ã§': 'ç',
+                'Ã¹': 'ù',
+                'Ã»': 'û',
+                'Ã‰': 'É',
+                'Ã€': 'À',
+                'â€™': "'",
+                'â€“': '-',
+                'â€œ': '“',
+                'â€': '”',
+                'Ã¶': 'ö',
+                'Ã¯': 'ï',
+                'Ã¼': 'ü',
+                'â€¦': '…',
+                'Â': '',
+            }
+            for wrong, correct in corrections.items():
+                text = text.replace(wrong, correct)
+            return text
+
+
+# Titre du QCM
+st.header("QCM : L'IA au service de la sécurité intérieure", divider=True)
+
+# Déclaration variables streamlit 
+if 'commencer' not in st.session_state:
+    st.session_state['commencer'] = False
+if 'next' not in st.session_state:
+    st.session_state['next'] = False 
+
+if 'end' not in st.session_state:
+    st.session_state['end'] = False 
+
+if 'quest_num' not in st.session_state:
+    st.session_state['quest_num'] = 0
+
+st.session_state.setdefault('point', 0)
+st.session_state.setdefault('nom', None)
+st.session_state.setdefault('prenom', None)
+st.session_state.setdefault('end', False)
+st.session_state.setdefault('dropped', False)
+st.session_state.setdefault('uploaded_files', None)
+st.session_state.setdefault('gene', None)
+st.session_state.setdefault('main', False)
+st.session_state.setdefault('liste', [])
+st.session_state.setdefault('dico', {})
+
+
+# Variables pour phi3 vision
+st.session_state.setdefault('para_phi', False)
+st.session_state.setdefault('processor', None)
+st.session_state.setdefault('model_phi', None)
+st.session_state.setdefault('prompt_phi', None)
+
+# Variable pour Llama 3 
+st.session_state.setdefault('para_llama3', False)
+st.session_state.setdefault('llama_model', None)
+st.session_state.setdefault('tokenizer', None)
+
+
+# Permettre de supprimer le drag and drop : widget permettant de mêttre les fichiers voulues pour générer des questions dessus
+if not st.session_state.dropped:
+    st.session_state.uploaded_files = st.file_uploader("Choose a file", accept_multiple_files=True, type=['pdf','txt'])
+
+# Liste qui récupère tous les fichiers envoyés
+files = []
+
+# Entrer dans la boucle streamlit
+if st.session_state.uploaded_files:
+    st.session_state.dropped = True
+
+    """ 
+    Attention: Pour la manipulation des fichiers récupérés, obilgation de rester dans l'instruction "with tempfile.TemporaryDirectory()..." 
+    """
+
+    # Créer un répertoire temporaire pour pouvoir manipuler les fichiers envoyé comme des fichiers locaux 
+    with tempfile.TemporaryDirectory() as temp_dir:
+
+        # Pour tout les documents envoyés via le drag and drop
+        for uploaded_file in st.session_state.uploaded_files:
+
+            # Obtenir le contenu du fichier en mémoire
+            bytes_data = uploaded_file.getvalue()
+            
+            # Définir le chemain temporaire du fichier et ainsi pouvoir le manipuler comme un fichier local 
+            file_path = os.path.join(temp_dir, uploaded_file.name)
+
+            
+            # Écrivez le fichier sur le disque
+            with open(file_path, 'wb') as f:
+                f.write(bytes_data)
+            
+            # Ajoute le chemain temporaire dans une liste
+            files.append(file_path)
+
+            # Une fois que tous les documents envoyés sont traités, la génération commence
+            if uploaded_file == st.session_state.uploaded_files[-1]:
+                st.session_state.gene = True
+
+        # Si Phi3 vision n'a pas encore été paramêtré alors le paramètrage à lieu 
+        if not st.session_state.para_phi:
+            st.write("Parametrage de phi3 vision en cours...")
+            st.session_state.processor, st.session_state.model_phi,  st.session_state.prompt_phi, st.session_state.para_phi = parametre_phi3_vision()
+            st.write('Parametrage de phi3 vision terminé')
+
+        # Une fois le paramêtrage fait, on génère
+        if st.session_state.gene:
+
+            # La génération se fait pour tous les documents
+            for file in files:
+
+                # Ouvre le document à l'aide des chemains créer plus tôt
+                doc = fitz.open(file)
+
+                # Compte le nombre de page du document actuel
+                page_count = doc.page_count
+
+                # Liste des refs déjà traités
+                xreflist = []  
+
+                # Liste de toutes les refs des images (voire plus bas)
+                imglist = []  
+
+                # Variable pour envoyer les textes à Llama3
+                all_pages = []
+                liste_toute_description = []
+                # Boucle pour traiter chaque page du fichier actuel
+                for pno in range(page_count):
+
+                    # Pouv vérifier où on en est pour la description d'images
+                    st.write("Page", pno+1, "sur", page_count)
+
+                    # Obtenir la liste des images sur la page
+                    images = doc.get_page_images(pno)  
+
+                    # Ajouter les références des images à la liste
+                    imglist.extend([x[0] for x in images])  
+
+                    # Variable permettant de récuperer le contenu de la page en texte
+                    text =''
+
+                    # Ajoute les descriptions d'images
+                    text += generation_phi3_vision(images, doc, xreflist, text, st.session_state.processor, st.session_state.model_phi,  st.session_state.prompt_phi)
+                    liste_toute_description.append(text)
+
+                    # Load la page actuel pour permettre d'extraire tout le texte
+                    page = doc.load_page(pno)
+                    text += page.get_text()
+
+                    
+                    
+                    # Ajoute chaque page textuelle (description image + texte simple) dans une liste
+                    all_pages.append(text)
+
+                # Sauvegarde la page sur l'ordi pour vérification uniquement
+                filename = f"/workspace/je_sais_pas/toutes_les_descriptions.txt"
+
+                with open(filename, "w") as file:
+                    file.write('\n'.join(liste_toute_description))
+
+            
+                # Joint toutes les pages en un et un seul document pour faciliter la compréhension de Llama3
+                document = '\n'.join(all_pages)
+
+                # Retirer les doublons des images trouvées
+                imglist = list(set(imglist))  
+
+                # Afficher le nombre total d'images trouvées
+                st.write(len(set(imglist)), "images in total")
+
+                # Afficher le nombre total d'images extraites
+                st.write(len(xreflist), "images extracted")
+                st.write("#### Tous les documents sont extraits ####")
+        
+                # Voire le temps que la description d'image prend sur tout le document
+                mid_time = time.time()
+                st.write("Inference time: {}".format(mid_time - t0))
+
+                # Une fois fait, vide le cache pour permettre à Llama3 de prendre toute la place dont il a besoin
+                torch.cuda.empty_cache()
+
+                # Paramêtre Llama3 si pas encore fait
+                if not st.session_state.para_llama3:
+                    st.session_state.llama_model, st.session_state.tokenizer, st.session_state.para_llama3 = parametre_Llama3()
+                
+                # Récupère une liste des générations faites par Llama3
+                st.session_state.liste = generation_llama3(document, st.session_state.llama_model, st.session_state.tokenizer)
+                
+                # Calcul le temps mis une fois les deux types de générations faites
+                end_time = time.time()
+                st.write("Inference time: {}".format(end_time - t0))
+
+                # Rassemble toutes les question générées par Llama3 en un seul document
+
+                st.session_state.liste = '\n'.join(st.session_state.liste)
+                print("Listes des questions:  ", st.session_state.liste)
+
+                # Permet de rentrer dans la boucle principale après généaration des questions
+                st.session_state.main = True
+
+                # Ferme la possibilités de remettre des fichiers
+                st.session_state.uploaded_files = False
+
+                # Ferme la génération
+                st.session_state.gene = False
+
+
+# Main loop
+if st.session_state.main:
+
+    """
+    Régulare expression permettant d'extraire les questions, options et réponses dans un format précis
+
+    "Quel..*?\?\n" : Extrait toutes les questions commençant par quel ou quelles ou quelle ou quels et finissant par un "?"
+
+    r'Options:\n\s*A\.\s*.+\n\s*B\.\s*.+\n\s*C\.\s*.+\n\s*D\.\s*.+' : 
+    
+    Extrait toutes les possibilités sous la forme:
+        Options:
+        A. 
+        B.
+        C. 
+        D.      
+
+    r'Reponse..\s*\w+': Extrait la ligne commençant par "Réponse".
+    """
+
+    #NOTE Retravailler les régulars expressions pour être sûr de ne louper aucun cas de figure 
+    question = "Quel..*?\?\n"
+    option = r'Options:\n\s*A\.\s*.+\n\s*B\.\s*.+\n\s*C\.\s*.+\n\s*D\.\s*.+'
+    reponse =  r'Reponse..\s*\w+'
+
+
+    # 3 listes créer, une pour les questions, une pour les options et une pour les réponses
+    liste_question = re.findall(question, st.session_state.liste)
+    liste_option = re.findall(option, st.session_state.liste)
+    liste_reponse = re.findall(reponse, st.session_state.liste)
+
+    # Initialise la variable pour le rendu final
+    liste_finale = []
+
+    filename = f"/workspace/je_sais_pas/liste_question.txt"
+
+    with open(filename, "w") as file:
+        file.write('\n'.join(liste_question))
+
+    filename = f"/workspace/je_sais_pas/liste_opt.txt"
+
+    with open(filename, "w") as file:
+        file.write('\n'.join(liste_option))
+
+    filename = f"/workspace/je_sais_pas/liste_rep.txt"
+    with open(filename, "w") as file:
+        file.write('\n'.join(liste_reponse))
+
+      
+    # Check chaque question jusqu'à ce qu'une question n'est pas d'option ou de réponse associé
+    for i in range(len(liste_question)):
+
+        # Ajoute la question à la liste
+        liste_finale.append(liste_question[i])
+
+        # S'il n'y a pas d'option associé à la dernière question, on supprime la question
+        try: 
+            liste_finale.append(liste_option[i])
+        except: 
+            liste_finale.pop()
+            break
+
+        # S'il n'y a pas de réponse associée à la dernière question mais qu'il y a des options, on supprime la question et les options
+        try:
+            liste_finale.append(liste_reponse[i]+'\n')
+        except: 
+            liste_finale.pop()
+            liste_finale.pop()
+            break
+        # break permet d'arêter la boucle car si pas d'option ou de réponse disponibl pour une itérations, ça sera pareil pour la suivante.
+
+
+    # Transforme la liste comprenant les questions, options et réponse. Exemple de sortie de la liste: [question1, options1, reponse1, question2, options2, reponse2, questions3, options3, reponse3, ...]
+    liste_finale = '\n'.join(liste_finale)
+
+    filename = f"/workspace/je_sais_pas/liste_final_join.txt"
+    with open(filename, "w") as file:
+        file.write(liste_finale)
+
+    # Réencode les caractères spéciaux en les remplaçant selon la focntione correct_encoding
+    x = correct_encoding(liste_finale)
+
+    
+    # Enregistre le qcm formater sur l'ordi histoire d'avoir une idée (et pour vérifier en cas de soucis)
+    filename = f"/workspace/je_sais_pas/QCM.txt"
+    with open(filename, 'w') as file:
+         file.write(x)
+    
+    # Récupère la question, les options et la réponse
+    test = r"Quel..*?\?\n\s*Options:\n\s*A\.\s*\w+\n\s*B\.\s*\w+\n\s*C\.\s*\w+\n\s*D\.\s*\w+\n\s*Reponse..\s*\w+"
+    liste_question = re.findall(test, x)
+
+    # Initialisation du dico contenant toues les questions, options et réponses
+    st.session_state.dico = {}
+
+    # Création du dictionnaire
+    for indexe, question in enumerate(liste_question):
+        st.session_state.dico[f'question{indexe}']= re.search("Quel..*?\?\n", question)[0]
+        st.session_state.dico[f'option{indexe}'] = re.search(r'Options:\n\s*A\.\s*\w+\n\s*B\.\s*\w+\n\s*C\.\s*\w+\n\s*D\.\s*\w+',question)[0].split('\n')
+        st.session_state.dico[f'option{indexe}'] = [value.strip() for value in st.session_state.dico[f'option{indexe}'][1:]]
+        st.session_state.dico[f'reponse{indexe}'] = re.search(r'Reponse..\s*\w+', question)[0]
+    
+    # Une fois tout cela fait, le QCM peut commencer
+    if not st.session_state.commencer:
+        st.session_state.nom=st.text_input("Votre nom :")
+        st.session_state.prenom=st.text_input("Votre prénom :")
+        button_start = st.button(label = "Commencer", key='commence')
+
+        if button_start:
+            st.session_state.commencer = True
+
+    if st.session_state.commencer:
+
+        # Permet de passer à la question suivante
+        if st.session_state.next:
+                    st.session_state.quest_num += 1
+                    st.session_state.next = False
+
+        # Selon le nombre de question voulu
+        if st.session_state.quest_num <= 10:
+            
+            st.session_state.repondu = False
+
+            envoyer = st.button('Envoyer')
+
+            #NOTE Faire une condition pour le cas où rien n'est sélectionnée.
+            if envoyer and not st.session_state.repondu:
+                st.session_state.repondu = True
+
+            quest_num = st.session_state.quest_num+1
+
+            print(st.session_state.dico)
+
+            # Affichage de la question
+            question = st.write('**Question ' +str(quest_num) + ' :**\n\n ' , st.session_state.dico[f'question{st.session_state.quest_num}'])
+            st.write('Choix: ')
+
+            #BUG Les possibilités ne se change qu'après avoir cliquer sur l'une des possibilités
+            # Affichage des propositions
+            option1 = st.checkbox(label=st.session_state.dico[f'option{st.session_state.quest_num}'][0], key=f'A{st.session_state.quest_num}', disabled=st.session_state.repondu)
+            option2 = st.checkbox(label=st.session_state.dico[f'option{st.session_state.quest_num}'][1], key=f'B{st.session_state.quest_num}', disabled=st.session_state.repondu)
+            option3 = st.checkbox(label=st.session_state.dico[f'option{st.session_state.quest_num}'][2], key=f'C{st.session_state.quest_num}', disabled=st.session_state.repondu)
+            option4 = st.checkbox(label=st.session_state.dico[f'option{st.session_state.quest_num}'][3], key=f'D{st.session_state.quest_num}', disabled=st.session_state.repondu)
+            
+            # Bouton permettant de passer à la question suivante
+            if st.button('Question suivante') :
+                st.session_state.next = True
+
+
+            # To give a point if good answer
+            if (option1 and envoyer) and (st.session_state.dico[f'option{st.session_state.quest_num}'][0][:1].strip() in  st.session_state.dico[f'reponse{st.session_state.quest_num}']):
+                st.session_state.point += 1
+
+            elif (option2 and envoyer) and (st.session_state.dico[f'option{st.session_state.quest_num}'][1][:1].strip() in  st.session_state.dico[f'reponse{st.session_state.quest_num}']):
+                st.session_state.point += 1
+
+            elif (option3 and envoyer) and (st.session_state.dico[f'option{st.session_state.quest_num}'][2][:1].strip() in  st.session_state.dico[f'reponse{st.session_state.quest_num}']):
+                st.session_state.point += 1
+
+            elif (option4 and envoyer) and (st.session_state.dico[f'option{st.session_state.quest_num}'][3][:1].strip() in  st.session_state.dico[f'reponse{st.session_state.quest_num}']):
+                st.session_state.point += 1
+
+            # Si la réponse a déjà été envoyée, afficher la réponse correcte
+            if st.session_state.repondu:
+                rep = st.session_state.dico[f'reponse{st.session_state.quest_num}']
+                st.write(f'**Réponse** : {rep}')
+
+            st.markdown(f"<h1 style='font-size: 30px;'> Note : {st.session_state.point}/{len(st.session_state.dico)}</h1>", unsafe_allow_html=True)
+    
+
+        # Une fois toute les question faites, affiche le résultat
+        else:
+            st.write(f'Le test est fini. Note finale : {st.session_state.point}/{len(st.session_state.dico)}')
+            st.session_state.end = True
+
+    # Le QCM étant fini, enregistre le résultat dans un fichier csv
+    if st.session_state.end:
+
+        # Charger ou créer le fichier CSV pour enregistrer les résultats
+        csv_file = r'C:\Users\eloua\OneDrive\Bureau\IA_pedago\Projet_final\formatag\resultats.csv'
+        
+        with open(csv_file, 'w', newline='') as csvfile:
+            line = csv.writer(csvfile)
+            line.writerow(['Nom', 'Prénom', 'Résultat'])
+            line.writerow([st.session_state.nom, st.session_state.prenom,st.session_state.point])
