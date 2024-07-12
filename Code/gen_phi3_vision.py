@@ -63,6 +63,7 @@ def parametre_phi3_vision():
             -True est seulement là pour être récupéré dans une variable afin de ne pas paramêtrer de nouveau inutilement.
 
     """
+    
     # Quantization en 8bits
     nf8_config = BitsAndBytesConfig(load_in_8bit=True)
 

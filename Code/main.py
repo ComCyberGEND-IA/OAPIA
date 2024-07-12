@@ -1,23 +1,23 @@
 # Import nécéssaire
-import streamlit as st
-from streamlit_pdf_viewer import pdf_viewer
-import tempfile
-import os
-import fitz 
-import re
 import csv
-import fitz
-import os  
-import torch
+import fitz 
+import os
+import re
+import streamlit as st
+import tempfile
 import time
+import torch
 import warnings
+
+# Permet de supprimer des messages inutiles au moment du chargement des modèles
 warnings.filterwarnings("ignore")
+
 from gen_phi3_vision import generation_phi3_vision, parametre_phi3_vision
 from gen_llama3 import generation_llama3, parametre_Llama3
 
-warnings.filterwarnings("ignore")
-
+# Vider le cache pour être sûr d'utiliser toute la place nécéssaire
 torch.cuda.empty_cache()
+
 # Pour calculer l'inference
 t0 = time.time()
 
@@ -53,20 +53,15 @@ def correct_encoding(text):
 
 # Titre du QCM
 st.header("QCM : L'IA au service de la sécurité intérieure", divider=True)
+# Mention IA
 st.markdown("QCM généré par intelligence artificelle, validé par humain")
 
+
 # Déclaration variables streamlit 
-if 'commencer' not in st.session_state:
-    st.session_state['commencer'] = False
-if 'next' not in st.session_state:
-    st.session_state['next'] = False 
-
-if 'end' not in st.session_state:
-    st.session_state['end'] = False 
-
-if 'quest_num' not in st.session_state:
-    st.session_state['quest_num'] = 0
-
+st.session_state.setdefault('commencer', False)
+st.session_state.setdefault('next', False)
+st.session_state.setdefault('end', False)
+st.session_state.setdefault('quest_num', 0)
 st.session_state.setdefault('point', 0)
 st.session_state.setdefault('nom', None)
 st.session_state.setdefault('prenom', None)
@@ -99,14 +94,12 @@ if not st.session_state.dropped:
 files = []
 
 
-# Entrer dans la boucle streamlit
+# Entrer dans la boucle streamlit pour la génération pour tous les fichiers mis
 if st.session_state.uploaded_files:
     st.session_state.dropped = True
 
     # Attention: Pour la manipulation des fichiers récupérés, 
     # obligation de rester dans l'instruction "with tempfile.TemporaryDirectory()..." 
-    
-
     # Créer un répertoire temporaire pour pouvoir manipuler les fichiers envoyé comme des fichiers locaux 
     with tempfile.TemporaryDirectory() as temp_dir:
 
@@ -116,15 +109,15 @@ if st.session_state.uploaded_files:
             # Obtenir le contenu du fichier en mémoire
             bytes_data = uploaded_file.getvalue()
             
-            # Définir le chemain temporaire du fichier et ainsi pouvoir le manipuler comme un fichier local 
+            # Définir le chemin temporaire du fichier et ainsi pouvoir le manipuler comme un fichier local 
             file_path = os.path.join(temp_dir, uploaded_file.name)
 
             
-            # Écrivez le fichier sur le disque
+            # Écris le fichier sur le disque
             with open(file_path, 'wb') as f:
                 f.write(bytes_data)
             
-            # Ajoute le chemain temporaire dans une liste
+            # Ajoute le chemin temporaire dans une liste
             files.append(file_path)
 
             # Une fois que tous les documents envoyés sont traités, la génération commence
@@ -133,13 +126,11 @@ if st.session_state.uploaded_files:
 
         # Si Phi3 vision n'a pas encore été paramêtré alors le paramètrage à lieu 
         if not st.session_state.para_phi:
-
             # st.spinner permet juste d'ajouteur une animation pendant le chargement de phi3 vision
             with st.spinner('Chargement de phi 3 vision...'):
                 st.session_state.processor, st.session_state.model_phi,  st.session_state.prompt_phi, st.session_state.para_phi = parametre_phi3_vision()
                 st.success('Modèle chargé avec succès!')
 
-    
         # Une fois le paramêtrage fait, on génère
         if st.session_state.gene:
 
@@ -160,8 +151,6 @@ if st.session_state.uploaded_files:
 
                 # Variable pour envoyer les textes à Llama3
                 all_pages = []
-                liste_toute_description = []
-
 
                 # Vide la variable pour permettre d'actualiser le st.write et non pas écrire en dessous
                 with st.empty():
@@ -187,26 +176,13 @@ if st.session_state.uploaded_files:
 
                                 # Ajoute les descriptions d'images
                                 text += generation_phi3_vision(images, doc, xreflist, text, st.session_state.processor, st.session_state.model_phi,  st.session_state.prompt_phi)
-                                liste_toute_description.append(text)
 
                                 # Load la page actuel pour permettre d'extraire tout le texte
                                 page = doc.load_page(pno)
                                 text += page.get_text()
 
                         # Ajoute chaque page textuelle (description image + texte simple) dans une liste
-                        all_pages.append(text)
-
-                # Sauvegarde la page sur l'ordi pour vérification uniquement
-                filename = f"/workspace/je_sais_pas/toutes_les_descriptions.txt"
-
-                with open(filename, "w") as file:
-                    file.write('\n'.join(liste_toute_description))
-
-                 # Sauvegarde la page sur l'ordi pour vérification uniquement
-                filename = f"/workspace/je_sais_pas/toutes_les_pages.txt"
-
-                with open(filename, "w") as file:
-                    file.write('\n'.join(all_pages))                
+                        all_pages.append(text)               
                     
                 # Joint toutes les pages en un et un seul document pour faciliter la compréhension de Llama3
                 document = '\n'.join(all_pages)
@@ -236,7 +212,7 @@ if st.session_state.uploaded_files:
                         st.session_state.llama_model, st.session_state.tokenizer, st.session_state.para_llama3 = parametre_Llama3()
                         st.success('Modèle chargé avec succès!')
                 
-
+                # st.spinner permet juste d'ajouteur une animation pendant le génération llama3
                 with st.spinner('Génération du QCM...'):
                     # Récupère une liste des générations faites par Llama3
                     st.session_state.liste = generation_llama3(document, st.session_state.llama_model, st.session_state.tokenizer)
@@ -246,7 +222,6 @@ if st.session_state.uploaded_files:
                 st.write("Inference time: {}".format(end_time - t0))
 
                 # Rassemble toutes les question générées par Llama3 en un seul document
-
                 st.session_state.liste = '\n'.join(st.session_state.liste)
                 print("Listes des questions:  ", st.session_state.liste)
 
@@ -263,13 +238,17 @@ if st.session_state.uploaded_files:
 # Main loop
 if st.session_state.main:
 
+    # Expression permettant de formater
     question = "##Question:..*?\?\n"
     option = r'Options:\n\s*A\.\s*.+\n\s*B\.\s*.+\n\s*C\.\s*.+\n\s*D\.\s*.+'
     reponse =  r'Reponse..\s*\w+'
 
 
     # 3 listes créer, une pour les questions, une pour les options et une pour les réponses
+    # re.findall renvoie une liste de tout les éléments respectant la regex
     liste_question = re.findall(question, st.session_state.liste)
+
+    # Une fois toutes les questions récupérée, supprime le "##" (servant simplement à formater le modèle)
     for i in range(len(liste_question)):
         liste_question[i] = liste_question[i][len("##"):].strip()
 
@@ -280,14 +259,16 @@ if st.session_state.main:
     liste_finale = []
 
 
-    
     # Check chaque question jusqu'à ce qu'une question n'est pas d'option ou de réponse associé
     for i in range(len(liste_question)):
+
+        # Afin de créer une liste contenant question, options, et réponse 
         liste_inte = []
+
         # Ajoute la question à la liste
         liste_inte.append(liste_question[i])
 
-        # S'il n'y a pas d'option associé à la dernière question, on supprime la question
+        # S'il n'y a pas d'options associé à la dernière question, on supprime la question
         try: 
             liste_inte.append(liste_option[i])
         except: 
@@ -300,24 +281,23 @@ if st.session_state.main:
         except: 
             liste_inte.pop()
             liste_inte.pop()
-            break
-        # break permet d'arêter la boucle car si pas d'option ou de réponse disponibl pour une itérations, ça sera pareil pour la suivante.
+            break   # Si plus d'options ou de réponses, alors la question est incomplète et donc inutile
 
-    # Transforme la liste comprenant les questions, options et réponse. Exemple de sortie de la liste: [question1 options1 reponse1, question2 options2 reponse2, questions3 options3 reponse3, ...]
-    liste_finale.append('\n'.join(liste_inte))
+        # Transforme la liste comprenant les questions, options et réponse. Exemple de sortie de la liste: [question1 options1 reponse1, question2 options2 reponse2, questions3 options3 reponse3, ...]
+        liste_finale.append('\n'.join(liste_inte))
 
-    # Réencode les caractères spéciaux en les remplaçant selon la fonction correct_encoding
-    liste_question = [correct_encoding(phrase) for phrase in liste_finale]
+    # Réencode les caractères spéciaux en les remplaçant via la fonction correct_encoding
+    liste_finale = [correct_encoding(phrase) for phrase in liste_finale]
     
-    # Initialisation du dico contenant toues les questions, options et réponses
+    # Initialisation du dico contenant toutes les questions, options et réponses
     st.session_state.dico = {}
 
     # Création du dictionnaire
-    for indexe, question in enumerate(liste_question):
+    for indexe, question in enumerate(liste_finale):
         st.session_state.dico[f'question{indexe}']= re.search("Question:..*?\?\n", question)[0]
-        st.session_state.dico[f'option{indexe}'] = re.search(option,question)[0].split('\n')
+        st.session_state.dico[f'option{indexe}'] = re.search(option, question)[0].split('\n')
         st.session_state.dico[f'option{indexe}'] = [value.strip() for value in st.session_state.dico[f'option{indexe}'][1:]]
-        st.session_state.dico[f'reponse{indexe}'] = re.search(r'Reponse..\s*\w+', question)[0]
+        st.session_state.dico[f'reponse{indexe}'] = re.search(reponse, question)[0]
     
     # Une fois tout cela fait, le QCM peut commencer
     if not st.session_state.commencer:
@@ -354,7 +334,7 @@ if st.session_state.main:
             question = st.write('**Question ' +str(quest_num) + ' :**\n\n ' , st.session_state.dico[f'question{st.session_state.quest_num}'])
             st.write('Choix: ')
 
-            #BUG Les possibilités ne se change qu'après avoir cliquer sur l'une des possibilités
+            #BUG Les possibilités ne se change qu'après avoir cliquer sur l'une des possibilités a nouveau
             # Affichage des propositions
             option1 = st.checkbox(label=st.session_state.dico[f'option{st.session_state.quest_num}'][0], key=f'A{st.session_state.quest_num}', disabled=st.session_state.repondu)
             option2 = st.checkbox(label=st.session_state.dico[f'option{st.session_state.quest_num}'][1], key=f'B{st.session_state.quest_num}', disabled=st.session_state.repondu)
@@ -366,7 +346,7 @@ if st.session_state.main:
                 st.session_state.next = True
 
 
-            # To give a point if good answer
+            # Donner un point si bonne réponse
             if (option1 and envoyer) and (st.session_state.dico[f'option{st.session_state.quest_num}'][0][:1].strip() in  st.session_state.dico[f'reponse{st.session_state.quest_num}']):
                 st.session_state.point += 1
 
@@ -385,7 +365,6 @@ if st.session_state.main:
                 st.write(f'**Réponse** : {rep}')
 
             st.markdown(f"<h1 style='font-size: 30px;'> Note : {st.session_state.point}/{len(st.session_state.dico)}</h1>", unsafe_allow_html=True)
-    
 
         # Une fois toute les question faites, affiche le résultat
         else:
@@ -396,8 +375,8 @@ if st.session_state.main:
     if st.session_state.end:
 
         # Charger ou créer le fichier CSV pour enregistrer les résultats
-        csv_file = r'/workspace/formatag/resultats.csv'
-        
+        csv_file = r'/workspace/resultats.csv'
+
         with open(csv_file, 'w', newline='') as csvfile:
             line = csv.writer(csvfile)
             line.writerow(['Nom', 'Prénom', 'Résultat'])

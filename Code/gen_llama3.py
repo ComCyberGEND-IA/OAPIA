@@ -30,12 +30,16 @@ def parametre_Llama3():
            `AutoTokenizer`  permets de choisier le tokenizer adapté au model.
         
 
-        \u23ce Retourne: 
-                -model : `transformers.models.llama.modeling_llama.LlamaForCausalLM` (via `LlamaForCausalLM`)
+        \u23ce Retourne:
 
-                -tokenizer: `transformers.tokenization_utils_fast.PreTrainedTokenizerFast` (via `AutoTokenizer`)
+        model: `transformers.models.llama.modeling_llama.LlamaForCausalLM` (via `LlamaForCausalLM`)
 
-                -True est seulement là pour être récupéré dans une variable afin de ne pas paramêtrer de nouveau inutilement.
+        tokenizer: `transformers.tokenization_utils_fast.PreTrainedTokenizerFast` (via `AutoTokenizer`)
+
+        True est seulement là pour être récupéré dans une variable afin de ne pas paramêtrer de nouveau inutilement
+
+        
+
     """
 
     # attn_implementation permet d'accélerer l'inférence avec flash attentiton
