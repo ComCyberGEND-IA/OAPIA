@@ -19,7 +19,7 @@ Dans l'éditeur :
 
 Appuyer sur le bouton run.
 
-## utilisation recommandée (avec Docker)
+## Utilisation recommandée (avec Docker)
 
 Vous trouverez tous les fichiers nécéssaire pour l'installation dans **Installation_Docker**.
 
