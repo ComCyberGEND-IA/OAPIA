@@ -25,7 +25,7 @@ Vous trouverez tous les fichiers nécéssaire pour l'installation dans **Install
 
 Mettez dans le dossier souhaité tous les fichiers présent dans **Installation_Docker**.
 
-Naviguer vers le fichier en question, dans un terminale : `cd ...OAPIA\Code`
+Naviguer vers le fichier en question, dans un terminale : `cd ...OAPIA\Installation_Docker`
 Puis run : `docker build -t nom_de_l'image_souhaitée .`.
 
 Une fois fait: 
