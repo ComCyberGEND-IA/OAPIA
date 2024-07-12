@@ -11,6 +11,7 @@ import os
 import torch
 import time
 import warnings
+warnings.filterwarnings("ignore")
 from gen_phi3_vision import generation_phi3_vision, parametre_phi3_vision
 from gen_llama3 import generation_llama3, parametre_Llama3
 
@@ -52,6 +53,7 @@ def correct_encoding(text):
 
 # Titre du QCM
 st.header("QCM : L'IA au service de la sécurité intérieure", divider=True)
+st.markdown("QCM généré par intelligence artificelle, validé par humain")
 
 # Déclaration variables streamlit 
 if 'commencer' not in st.session_state:
@@ -96,13 +98,14 @@ if not st.session_state.dropped:
 # Liste qui récupère tous les fichiers envoyés
 files = []
 
+
 # Entrer dans la boucle streamlit
 if st.session_state.uploaded_files:
     st.session_state.dropped = True
 
-    """ 
-    Attention: Pour la manipulation des fichiers récupérés, obilgation de rester dans l'instruction "with tempfile.TemporaryDirectory()..." 
-    """
+    # Attention: Pour la manipulation des fichiers récupérés, 
+    # obligation de rester dans l'instruction "with tempfile.TemporaryDirectory()..." 
+    
 
     # Créer un répertoire temporaire pour pouvoir manipuler les fichiers envoyé comme des fichiers locaux 
     with tempfile.TemporaryDirectory() as temp_dir:
@@ -130,10 +133,13 @@ if st.session_state.uploaded_files:
 
         # Si Phi3 vision n'a pas encore été paramêtré alors le paramètrage à lieu 
         if not st.session_state.para_phi:
-            st.write("Parametrage de phi3 vision en cours...")
-            st.session_state.processor, st.session_state.model_phi,  st.session_state.prompt_phi, st.session_state.para_phi = parametre_phi3_vision()
-            st.write('Parametrage de phi3 vision terminé')
 
+            # st.spinner permet juste d'ajouteur une animation pendant le chargement de phi3 vision
+            with st.spinner('Chargement de phi 3 vision...'):
+                st.session_state.processor, st.session_state.model_phi,  st.session_state.prompt_phi, st.session_state.para_phi = parametre_phi3_vision()
+                st.success('Modèle chargé avec succès!')
+
+    
         # Une fois le paramêtrage fait, on génère
         if st.session_state.gene:
 
@@ -155,33 +161,40 @@ if st.session_state.uploaded_files:
                 # Variable pour envoyer les textes à Llama3
                 all_pages = []
                 liste_toute_description = []
-                # Boucle pour traiter chaque page du fichier actuel
-                for pno in range(page_count):
 
-                    # Pouv vérifier où on en est pour la description d'images
-                    st.write("Page", pno+1, "sur", page_count)
 
-                    # Obtenir la liste des images sur la page
-                    images = doc.get_page_images(pno)  
+                # Vide la variable pour permettre d'actualiser le st.write et non pas écrire en dessous
+                with st.empty():
+                    # Boucle pour traiter chaque page du fichier actuel
+                    for pno in range(page_count):
 
-                    # Ajouter les références des images à la liste
-                    imglist.extend([x[0] for x in images])  
+                        # Sert seulement à creer deux colonnes pour la présentation du chargement, rien d'autre
+                        gauche, droite = st.columns(2)
 
-                    # Variable permettant de récuperer le contenu de la page en texte
-                    text =''
+                        with droite:
+                            st.write(f"Extraction page : {pno+1} / {page_count}")
 
-                    # Ajoute les descriptions d'images
-                    text += generation_phi3_vision(images, doc, xreflist, text, st.session_state.processor, st.session_state.model_phi,  st.session_state.prompt_phi)
-                    liste_toute_description.append(text)
+                        with gauche: 
+                            with st.spinner('Extraction des images et du texte en cours...'):
+                                # Obtenir la liste des images sur la page
+                                images = doc.get_page_images(pno)  
 
-                    # Load la page actuel pour permettre d'extraire tout le texte
-                    page = doc.load_page(pno)
-                    text += page.get_text()
+                                # Ajouter les références des images à la liste
+                                imglist.extend([x[0] for x in images])  
 
-                    
-                    
-                    # Ajoute chaque page textuelle (description image + texte simple) dans une liste
-                    all_pages.append(text)
+                                # Variable permettant de récuperer le contenu de la page en texte
+                                text =''
+
+                                # Ajoute les descriptions d'images
+                                text += generation_phi3_vision(images, doc, xreflist, text, st.session_state.processor, st.session_state.model_phi,  st.session_state.prompt_phi)
+                                liste_toute_description.append(text)
+
+                                # Load la page actuel pour permettre d'extraire tout le texte
+                                page = doc.load_page(pno)
+                                text += page.get_text()
+
+                        # Ajoute chaque page textuelle (description image + texte simple) dans une liste
+                        all_pages.append(text)
 
                 # Sauvegarde la page sur l'ordi pour vérification uniquement
                 filename = f"/workspace/je_sais_pas/toutes_les_descriptions.txt"
@@ -189,7 +202,12 @@ if st.session_state.uploaded_files:
                 with open(filename, "w") as file:
                     file.write('\n'.join(liste_toute_description))
 
-            
+                 # Sauvegarde la page sur l'ordi pour vérification uniquement
+                filename = f"/workspace/je_sais_pas/toutes_les_pages.txt"
+
+                with open(filename, "w") as file:
+                    file.write('\n'.join(all_pages))                
+                    
                 # Joint toutes les pages en un et un seul document pour faciliter la compréhension de Llama3
                 document = '\n'.join(all_pages)
 
@@ -212,10 +230,16 @@ if st.session_state.uploaded_files:
 
                 # Paramêtre Llama3 si pas encore fait
                 if not st.session_state.para_llama3:
-                    st.session_state.llama_model, st.session_state.tokenizer, st.session_state.para_llama3 = parametre_Llama3()
+
+                    # st.spinner permet juste d'ajouteur une animation pendant le chargement de phi3 vision
+                    with st.spinner('Chargement de Llama 3...'):
+                        st.session_state.llama_model, st.session_state.tokenizer, st.session_state.para_llama3 = parametre_Llama3()
+                        st.success('Modèle chargé avec succès!')
                 
-                # Récupère une liste des générations faites par Llama3
-                st.session_state.liste = generation_llama3(document, st.session_state.llama_model, st.session_state.tokenizer)
+
+                with st.spinner('Génération du QCM...'):
+                    # Récupère une liste des générations faites par Llama3
+                    st.session_state.liste = generation_llama3(document, st.session_state.llama_model, st.session_state.tokenizer)
                 
                 # Calcul le temps mis une fois les deux types de générations faites
                 end_time = time.time()
@@ -239,102 +263,59 @@ if st.session_state.uploaded_files:
 # Main loop
 if st.session_state.main:
 
-    """
-    Régulare expression permettant d'extraire les questions, options et réponses dans un format précis
-
-    "Quel..*?\?\n" : Extrait toutes les questions commençant par quel ou quelles ou quelle ou quels et finissant par un "?"
-
-    r'Options:\n\s*A\.\s*.+\n\s*B\.\s*.+\n\s*C\.\s*.+\n\s*D\.\s*.+' : 
-    
-    Extrait toutes les possibilités sous la forme:
-        Options:
-        A. 
-        B.
-        C. 
-        D.      
-
-    r'Reponse..\s*\w+': Extrait la ligne commençant par "Réponse".
-    """
-
-    #NOTE Retravailler les régulars expressions pour être sûr de ne louper aucun cas de figure 
-    question = "Quel..*?\?\n"
+    question = "##Question:..*?\?\n"
     option = r'Options:\n\s*A\.\s*.+\n\s*B\.\s*.+\n\s*C\.\s*.+\n\s*D\.\s*.+'
     reponse =  r'Reponse..\s*\w+'
 
 
     # 3 listes créer, une pour les questions, une pour les options et une pour les réponses
     liste_question = re.findall(question, st.session_state.liste)
+    for i in range(len(liste_question)):
+        liste_question[i] = liste_question[i][len("##"):].strip()
+
     liste_option = re.findall(option, st.session_state.liste)
     liste_reponse = re.findall(reponse, st.session_state.liste)
 
     # Initialise la variable pour le rendu final
     liste_finale = []
 
-    filename = f"/workspace/je_sais_pas/liste_question.txt"
 
-    with open(filename, "w") as file:
-        file.write('\n'.join(liste_question))
-
-    filename = f"/workspace/je_sais_pas/liste_opt.txt"
-
-    with open(filename, "w") as file:
-        file.write('\n'.join(liste_option))
-
-    filename = f"/workspace/je_sais_pas/liste_rep.txt"
-    with open(filename, "w") as file:
-        file.write('\n'.join(liste_reponse))
-
-      
+    
     # Check chaque question jusqu'à ce qu'une question n'est pas d'option ou de réponse associé
     for i in range(len(liste_question)):
-
+        liste_inte = []
         # Ajoute la question à la liste
-        liste_finale.append(liste_question[i])
+        liste_inte.append(liste_question[i])
 
         # S'il n'y a pas d'option associé à la dernière question, on supprime la question
         try: 
-            liste_finale.append(liste_option[i])
+            liste_inte.append(liste_option[i])
         except: 
-            liste_finale.pop()
+            liste_inte.pop()
             break
 
         # S'il n'y a pas de réponse associée à la dernière question mais qu'il y a des options, on supprime la question et les options
         try:
-            liste_finale.append(liste_reponse[i]+'\n')
+            liste_inte.append(liste_reponse[i]+'\n')
         except: 
-            liste_finale.pop()
-            liste_finale.pop()
+            liste_inte.pop()
+            liste_inte.pop()
             break
         # break permet d'arêter la boucle car si pas d'option ou de réponse disponibl pour une itérations, ça sera pareil pour la suivante.
 
+    # Transforme la liste comprenant les questions, options et réponse. Exemple de sortie de la liste: [question1 options1 reponse1, question2 options2 reponse2, questions3 options3 reponse3, ...]
+    liste_finale.append('\n'.join(liste_inte))
 
-    # Transforme la liste comprenant les questions, options et réponse. Exemple de sortie de la liste: [question1, options1, reponse1, question2, options2, reponse2, questions3, options3, reponse3, ...]
-    liste_finale = '\n'.join(liste_finale)
-
-    filename = f"/workspace/je_sais_pas/liste_final_join.txt"
-    with open(filename, "w") as file:
-        file.write(liste_finale)
-
-    # Réencode les caractères spéciaux en les remplaçant selon la focntione correct_encoding
-    x = correct_encoding(liste_finale)
-
+    # Réencode les caractères spéciaux en les remplaçant selon la fonction correct_encoding
+    liste_question = [correct_encoding(phrase) for phrase in liste_finale]
     
-    # Enregistre le qcm formater sur l'ordi histoire d'avoir une idée (et pour vérifier en cas de soucis)
-    filename = f"/workspace/je_sais_pas/QCM.txt"
-    with open(filename, 'w') as file:
-         file.write(x)
-    
-    # Récupère la question, les options et la réponse
-    test = r"Quel..*?\?\n\s*Options:\n\s*A\.\s*\w+\n\s*B\.\s*\w+\n\s*C\.\s*\w+\n\s*D\.\s*\w+\n\s*Reponse..\s*\w+"
-    liste_question = re.findall(test, x)
-
     # Initialisation du dico contenant toues les questions, options et réponses
     st.session_state.dico = {}
 
     # Création du dictionnaire
     for indexe, question in enumerate(liste_question):
-        st.session_state.dico[f'question{indexe}']= re.search("Quel..*?\?\n", question)[0]
-        st.session_state.dico[f'option{indexe}'] = re.search(r'Options:\n\s*A\.\s*\w+\n\s*B\.\s*\w+\n\s*C\.\s*\w+\n\s*D\.\s*\w+',question)[0].split('\n')
+        st.session_state.dico[f'question{indexe}']= re.search("Question:..*?\?\n", question)[0]
+        st.session_state.dico[f'option{indexe}'] = re.search(option,question)[0].split('\n')
         st.session_state.dico[f'option{indexe}'] = [value.strip() for value in st.session_state.dico[f'option{indexe}'][1:]]
         st.session_state.dico[f'reponse{indexe}'] = re.search(r'Reponse..\s*\w+', question)[0]
     
@@ -415,7 +396,7 @@ if st.session_state.main:
     if st.session_state.end:
 
         # Charger ou créer le fichier CSV pour enregistrer les résultats
-        csv_file = r'C:\Users\eloua\OneDrive\Bureau\IA_pedago\Projet_final\formatag\resultats.csv'
+        csv_file = r'/workspace/formatag/resultats.csv'
         
         with open(csv_file, 'w', newline='') as csvfile:
             line = csv.writer(csvfile)

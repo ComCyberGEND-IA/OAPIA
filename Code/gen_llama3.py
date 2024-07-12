@@ -2,7 +2,9 @@
 from transformers import AutoTokenizer,  BitsAndBytesConfig, LlamaForCausalLM
 import torch
 from langchain.text_splitter import RecursiveCharacterTextSplitter
+import warnings
 
+warnings.filterwarnings("ignore")
 torch.cuda.empty_cache()
 
 # Permet de séparer un texte (format str) en différents chunk selonde des seprators (de gauche à droite)
@@ -77,10 +79,18 @@ def generation_llama3(document:str, llama_model, tokenizer):
         print("Texte", i+1, "sur", length)
 
         # Prompt pour Llama3 contenant le chunk
-        f_prompt = f"""A partir de ce texte: {chunked_documents[i]}, 
-            Crée un QCM en français, basé uniquement sur le contexte donné, n'invente auqu'une questions ni réponse qui ne seraient pas dans ce contexte:  .
-            Crée une liste de question avec leurs numéros, Chaque question doit avoir 4 possibilités. Question à choix unique aveec réponse donnée à la fin
-        Suis le format suivant: 
+        f_prompt = f"""
+        
+        A partir de ce texte: {chunked_documents[i]}, 
+
+
+            Fait 3 questions avec 4 choix de réponse.
+            Vérifie que les réponses soit correctes.
+            Les réponses doivent être en langage naturel.
+        Ne rajoute pas de ligne de code à la fin. Contente toi de donner 3 questions.
+        Sert toi uniquement du document, aucune autre connaissance
+        Suis le format suivant:
+
         ##Question: [La question]
 
         ##Options:
@@ -89,13 +99,14 @@ def generation_llama3(document:str, llama_model, tokenizer):
         C. [Option C]
         D. [Option D]
         
-        ##Reponse: [lettre de la bonne réponse]"""
+        ##Reponse: [lettre de la bonne réponse]
+        """
 
         # Encodage  de l'entrée
         inputs = tokenizer(f_prompt, return_tensors="pt").to("cuda")
 
         # Generation de la réponse
-        reponse = llama_model.generate(inputs.input_ids, max_new_tokens=1000, repetition_penalty=1.2)
+        reponse = llama_model.generate(inputs.input_ids, max_new_tokens=1000, repetition_penalty=1.2, temperature=0.7)
 
         # Décodage de la réponse
         reponse = tokenizer.batch_decode(reponse, skip_special_tokens=True)[0]

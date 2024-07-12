@@ -4,7 +4,9 @@ import io
 from PIL import Image
 from transformers import AutoModelForCausalLM, AutoProcessor,  BitsAndBytesConfig
 import torch
+import warnings
 
+warnings.filterwarnings("ignore")
 
 # Vide le cache afin dêtre sur que toute la mémoire disponible est utilisé pour la génération
 torch.cuda.empty_cache()
@@ -70,10 +72,10 @@ def parametre_phi3_vision():
     processor = AutoProcessor.from_pretrained(phi_path, trust_remote_code=True, use_fast=True)
 
     # Modèle avec quantisation 
+    # attn_implementation permet d'accélérer l'inférence avec flash attention
     model = AutoModelForCausalLM.from_pretrained(phi_path, attn_implementation="flash_attention_2",
                                                     device_map="cuda", trust_remote_code=True, torch_dtype="auto",
                                                     quantization_config=nf8_config)
-
     # Prompt utilisé pour la description d'image
     messages = [{"role": "user", "content": "\Décris l'image. Tu ne dois rien inerprêter\n<|image_1|>"},
                 {"role": "system", 'content': 'français'}]
