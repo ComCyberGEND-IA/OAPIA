@@ -25,11 +25,14 @@ Vous trouverez tous les fichiers nécéssaire pour l'installation dans **Install
 
 Mettez dans le dossier souhaité tous les fichiers présent dans **Installation_Docker**.
 
-Dans un terminale, run : `docker build -t nom_de_l'image_souhaitée chemin_du_dossier`.
+Naviguer vers le fichier en question, dans un terminale : `cd ...OAPIA\Code`
+Puis run : `docker build -t nom_de_l'image_souhaitée .`.
 
-Toujours dans le terminale: `docker run --gpus all --rm -it -p 8501:8501 -v chemin_du_dossier:/workspace nom_de_l'image`. 
+Une fois fait: 
 
-Ajouter les fichiers python dans le dossier.
+Toujours dans le terminale: `docker run --gpus all --rm -it -p 8501:8501 -v chemin_du_dossier_souhaitée:/workspace nom_de_l'image`. 
+
+Ajouter les fichiers python dans le dossier (si ce n'est pas déjà le cas).
 
 
 Puis run: `streamlit run main.py`
