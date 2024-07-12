@@ -118,12 +118,6 @@ def generation_llama3(document:str, llama_model, tokenizer):
         # Pour enlever l'input de la réponse et supprime les espaces inutiles
         reponse = reponse[len(f_prompt):].strip()
 
-        # Sauvegarde la page sur l'ordi pour vérification uniquement
-        filename = f"/workspace/je_sais_pas/generation{i+1}.txt"
-
-        with open(filename, "w") as file:
-            file.write(reponse)
-
         # Ajoute la réponse dans une liste
         liste.append(reponse)
 
